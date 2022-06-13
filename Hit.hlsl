@@ -32,6 +32,7 @@ void ClosestHit(inout HitInfo payload, Attributes attrib)
 	{ 
 		hitColor = A[InstanceID()] * barycentrics.x + B[InstanceID()] * barycentrics.y + C[InstanceID()] * barycentrics.z;
 	}
+	
 	switch (InstanceID())
 	{
 	case 0:
