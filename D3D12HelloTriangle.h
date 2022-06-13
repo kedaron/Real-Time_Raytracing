@@ -12,6 +12,10 @@
 #pragma once
 
 #include "DXSample.h"
+#include <dxcapi.h>
+#include <vector>
+#include "nv_helpers_dx12/TopLevelASGenerator.h"
+#include "nv_helpers_dx12/ShaderBindingTableGenerator.h"
 
 using namespace DirectX;
 
@@ -72,4 +76,58 @@ private:
 	void CheckRaytracingSupport();
 	virtual void OnKeyUp(UINT8 key); 
 	bool m_raster = true;
+
+	// #DXR
+	struct AccelerationStructureBuffers
+	{
+		ComPtr<ID3D12Resource> pScratch; // Scratch memory for AS builder 
+		ComPtr<ID3D12Resource> pResult; // Where the AS is 
+		ComPtr<ID3D12Resource> pInstanceDesc; // Hold the matrices of the instances
+	};
+
+	ComPtr<ID3D12Resource> m_bottomLevelAS; // Storage for the bottom Level AS
+	nv_helpers_dx12::TopLevelASGenerator m_topLevelASGenerator;
+	AccelerationStructureBuffers m_topLevelASBuffers;
+	std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>> m_instances;
+
+	/// Create the acceleration structure of an instance
+    ///
+    /// \param vVertexBuffers : pair of buffer and vertex count
+    /// \return AccelerationStructureBuffers for TLAS
+	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers);
+
+	/// Create the main acceleration structure that holds
+	/// all instances of the scene
+	/// \param instances : pair of BLAS and transform
+	void CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3D12Resource>, DirectX::XMMATRIX>>& instances);
+	/// Create all acceleration structures, bottom and top
+	void CreateAccelerationStructures();
+
+	// #DXR
+	ComPtr<ID3D12RootSignature> CreateRayGenSignature();
+	ComPtr<ID3D12RootSignature> CreateMissSignature();
+	ComPtr<ID3D12RootSignature> CreateHitSignature();
+	void CreateRaytracingPipeline();
+	ComPtr<IDxcBlob> m_rayGenLibrary;
+	ComPtr<IDxcBlob> m_hitLibrary;
+	ComPtr<IDxcBlob> m_missLibrary;
+	ComPtr<ID3D12RootSignature> m_rayGenSignature;
+	ComPtr<ID3D12RootSignature> m_hitSignature;
+	ComPtr<ID3D12RootSignature> m_missSignature;
+	// Ray tracing pipeline state
+	ComPtr<ID3D12StateObject> m_rtStateObject;
+	// Ray tracing pipeline state properties, retaining the shader identifiers
+	// to use in the Shader Binding Table
+	ComPtr<ID3D12StateObjectProperties> m_rtStateObjectProps;
+
+	// #DXR
+	void CreateRaytracingOutputBuffer();
+	void CreateShaderResourceHeap();
+	ComPtr<ID3D12Resource> m_outputResource;
+	ComPtr<ID3D12DescriptorHeap> m_srvUavHeap;
+
+	// #DXR
+	void CreateShaderBindingTable();
+	nv_helpers_dx12::ShaderBindingTableGenerator m_sbtHelper;
+	ComPtr<ID3D12Resource> m_sbtStorage;
 };
