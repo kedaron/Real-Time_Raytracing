@@ -270,12 +270,16 @@ void D3D12HelloTriangle::LoadAssets()
 		// Define the geometry for a triangle.
 		Vertex triangleVertices[] =
 		{
-			{ {0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
+			/*{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
 			{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-			{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+			{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }*/
 			/*{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 1.0f, 0.0f, 1.0f}},
 			{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
 			{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 1.0f, 0.0f, 1.0f, 1.0f } }*/
+			{{std::sqrtf(8.f / 9.f), 0.f, -1.f / 3.f}, {1.f, 0.f, 0.f, 1.f}},
+			{{-std::sqrtf(2.f / 9.f), std::sqrtf(2.f / 3.f), -1.f / 3.f}, {0.f, 1.f, 0.f, 1.f}},
+			{{-std::sqrtf(2.f / 9.f), -std::sqrtf(2.f / 3.f), -1.f / 3.f}, {0.f, 0.f, 1.f, 1.f}},
+			{{0.f, 0.f, 1.f}, {1, 0, 1, 1}}
 		};
 
 		const UINT vertexBufferSize = sizeof(triangleVertices);
@@ -303,6 +307,26 @@ void D3D12HelloTriangle::LoadAssets()
 		m_vertexBufferView.BufferLocation = m_vertexBuffer->GetGPUVirtualAddress();
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
+
+		// #DXR Extra: Indexed Geometry
+		CreateMengerSpongeVB();
+
+		//----------------------------------------------------------------------------------------------
+		// Indices
+		std::vector<UINT> indices = { 0, 1, 2, 0, 3, 1, 0, 2, 3, 1, 3, 2 };
+		const UINT indexBufferSize = static_cast<UINT>(indices.size()) * sizeof(UINT);
+		CD3DX12_HEAP_PROPERTIES heapProperty = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC bufferResource = CD3DX12_RESOURCE_DESC::Buffer(indexBufferSize);
+		ThrowIfFailed(m_device->CreateCommittedResource(&heapProperty, D3D12_HEAP_FLAG_NONE, &bufferResource, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_indexBuffer)));
+		// Copy the triangle data to the index buffer.
+		UINT8* pIndexDataBegin;
+		ThrowIfFailed(m_indexBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
+		memcpy(pIndexDataBegin, indices.data(), indexBufferSize);
+		m_indexBuffer->Unmap(0, nullptr);
+		// Initialize the index buffer view.
+		m_indexBufferView.BufferLocation = m_indexBuffer->GetGPUVirtualAddress();
+		m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
+		m_indexBufferView.SizeInBytes = indexBufferSize;
 
 		// #DXR - Per Instance
 		// Create a vertex buffer for a ground plane, similarly to the triangle definition above
@@ -401,8 +425,16 @@ void D3D12HelloTriangle::PopulateCommandList()
 		const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f }; 
 		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); 
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr); 
-		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView); 
-		m_commandList->DrawInstanced(3, 1, 0, 0);
+		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+		m_commandList->IASetIndexBuffer(&m_indexBufferView);
+		m_commandList->DrawIndexedInstanced(12, 1, 0, 0, 0);
+
+		// #DXR Extra: Indexed Geometry
+		// In a way similar to triangle rendering, rasterize the Menger Sponge
+		m_commandList->IASetVertexBuffers(0, 1, &m_mengerVBView);
+		m_commandList->IASetIndexBuffer(&m_mengerIBView);
+		m_commandList->DrawIndexedInstanced(m_mengerIndexCount, 1, 0, 0, 0);
+
 		// #DXR Extra: Per-Instance Data (Floor)
 		// In a way similar to triangle rendering, rasterize the plane
 		m_commandList->IASetVertexBuffers(0, 1, &m_planeBufferView);
@@ -508,10 +540,19 @@ void D3D12HelloTriangle::WaitForPreviousFrame()
 // in 3 steps: gathering the geometry, computing the sizes of the required
 // buffers, and building the actual AS
 //
-D3D12HelloTriangle::AccelerationStructureBuffers D3D12HelloTriangle::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers) {
+// #DXR Extra: Indexed Geometry
+D3D12HelloTriangle::AccelerationStructureBuffers D3D12HelloTriangle::CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers, std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vIndexBuffers) {
 	nv_helpers_dx12::BottomLevelASGenerator bottomLevelAS;
 	// Adding all vertex buffers and not transforming their position. 
-	for (const auto& buffer : vVertexBuffers) { bottomLevelAS.AddVertexBuffer(buffer.first.Get(), 0, buffer.second, sizeof(Vertex), 0, 0); }
+	// for (const auto& buffer : vVertexBuffers) { bottomLevelAS.AddVertexBuffer(buffer.first.Get(), 0, buffer.second, sizeof(Vertex), 0, 0); }
+	for (size_t i = 0; i < vVertexBuffers.size(); i++) {
+		if (i < vIndexBuffers.size() && vIndexBuffers[i].second > 0) {
+			bottomLevelAS.AddVertexBuffer(vVertexBuffers[i].first.Get(), 0, vVertexBuffers[i].second, sizeof(Vertex), vIndexBuffers[i].first.Get(), 0, vIndexBuffers[i].second, nullptr, 0, true);
+		}
+		else {
+			bottomLevelAS.AddVertexBuffer(vVertexBuffers[i].first.Get(), 0, vVertexBuffers[i].second, sizeof(Vertex), 0, 0);
+		}
+	}
 	// The AS build requires some scratch space to store temporary information. 
 	// The amount of scratch memory is dependent on the scene complexity. 
 	UINT64 scratchSizeInBytes = 0;
@@ -579,16 +620,15 @@ void D3D12HelloTriangle::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3
 //
 void D3D12HelloTriangle::CreateAccelerationStructures() {
 	// Build the bottom AS from the Triangle vertex buffer 
-	AccelerationStructureBuffers bottomLevelBuffers = CreateBottomLevelAS({ {m_vertexBuffer.Get(), 3} });
+	AccelerationStructureBuffers bottomLevelBuffers = CreateBottomLevelAS({ {m_vertexBuffer.Get(), 4} }, { {m_indexBuffer.Get(), 12} });
+	// Build the bottom AS from the Menger Sponge vertex buffer
+	AccelerationStructureBuffers mengerBottomLevelBuffers = CreateBottomLevelAS({ {m_mengerVB.Get(), m_mengerVertexCount} }, { {m_mengerIB.Get(), m_mengerIndexCount} });
 	// #DXR Extra: Per-Instance Data (Floor)
 	AccelerationStructureBuffers planeBottomLevelBuffers = CreateBottomLevelAS({ {m_planeBuffer.Get(), 6} });
 	// triangle + a plane
-	m_instances = {
-		{bottomLevelBuffers.pResult, XMMatrixIdentity()},
-		{bottomLevelBuffers.pResult, XMMatrixTranslation(.6f, 0, 0)},
-		{bottomLevelBuffers.pResult, XMMatrixTranslation(-.6f, 0, 0)},
-		{planeBottomLevelBuffers.pResult, XMMatrixTranslation(0, 0, 0)}
-	};
+	// Add both the triangle and the indexed geometry
+	m_instances = { {bottomLevelBuffers.pResult, XMMatrixIdentity()}, { mengerBottomLevelBuffers.pResult, XMMatrixIdentity() },
+					{planeBottomLevelBuffers.pResult, XMMatrixTranslation(0, 0, 0)} };
 
 	CreateTopLevelAS(m_instances);
 
@@ -635,7 +675,9 @@ ComPtr<ID3D12RootSignature> D3D12HelloTriangle::CreateHitSignature() {
 	// shader binding table we will associate each hit shader instance with its
 	// constant buffer. Here we bind the buffer to the first slot, accessible in
 	// HLSL as register(b0)
-	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_CBV, 0);
+	//rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_CBV, 0);
+	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV, 0 /*t0*/); // vertices and colors
+	rsc.AddRootParameter(D3D12_ROOT_PARAMETER_TYPE_SRV, 1 /*t1*/); // indices
 	return rsc.Generate(m_device.Get(), true);
 }
 
@@ -830,9 +872,11 @@ void D3D12HelloTriangle::CreateShaderBindingTable() {
 	// #DXR Extra: Per-Instance Data
 	// Adding the triangle hit shader and constant buffer data
 	//m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_globalConstantBuffer->GetGPUVirtualAddress()) });
-	for (int i = 0; i < 3; ++i) {
-		m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_perInstanceConstantBuffers[i]->GetGPUVirtualAddress()) });
-	}
+	//for (int i = 0; i < 3; ++i) {
+	//	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_perInstanceConstantBuffers[i]->GetGPUVirtualAddress()) });
+	//}
+	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_vertexBuffer->GetGPUVirtualAddress()), (void*)(m_indexBuffer->GetGPUVirtualAddress()) });
+	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_mengerVB->GetGPUVirtualAddress()), (void*)(m_mengerIB->GetGPUVirtualAddress()) });
 
 	// The plane also uses a constant buffer for its vertex colors
 	//m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_perInstanceConstantBuffers[0]->GetGPUVirtualAddress()) });
@@ -1030,4 +1074,63 @@ void D3D12HelloTriangle::CreateDepthBuffer()
 	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 	m_device->CreateDepthStencilView(m_depthStencil.Get(), &dsvDesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+}
+
+// #DXR Extra: Indexed Geometry
+void D3D12HelloTriangle::CreateMengerSpongeVB()
+{
+	std::vector< Vertex > vertices;
+	std::vector< UINT > indices;
+	nv_helpers_dx12::GenerateMengerSponge(3, 0.75, vertices, indices);
+	{
+		const UINT mengerVBSize = static_cast<UINT>(vertices.size()) * sizeof(Vertex);
+		// Note: using upload heaps to transfer static data like vert buffers is not 
+		// recommended. Every time the GPU needs it, the upload heap will be 
+		// marshalled over. Please read up on Default Heap usage. An upload heap is 
+		// used here for code simplicity and because there are very few verts to 
+		// actually transfer. 
+		CD3DX12_HEAP_PROPERTIES heapProperty = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC bufferResource = CD3DX12_RESOURCE_DESC::Buffer(mengerVBSize);
+		ThrowIfFailed(m_device->CreateCommittedResource(&heapProperty, D3D12_HEAP_FLAG_NONE, &bufferResource, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_mengerVB)));
+
+		// Copy the triangle data to the vertex buffer. 
+		UINT8* pVertexDataBegin;
+		CD3DX12_RANGE readRange(0, 0);
+		// We do not intend to read from this resource on the CPU. 
+		ThrowIfFailed(m_mengerVB->Map(0, &readRange, reinterpret_cast<void**>(&pVertexDataBegin)));
+		memcpy(pVertexDataBegin, vertices.data(), mengerVBSize);
+		m_mengerVB->Unmap(0, nullptr);
+
+		// Initialize the vertex buffer view. 
+		m_mengerVBView.BufferLocation = m_mengerVB->GetGPUVirtualAddress();
+		m_mengerVBView.StrideInBytes = sizeof(Vertex);
+		m_mengerVBView.SizeInBytes = mengerVBSize;
+	}
+
+	{
+		const UINT mengerIBSize = static_cast<UINT>(indices.size()) * sizeof(UINT);
+		// Note: using upload heaps to transfer static data like vert buffers is not 
+		// recommended. Every time the GPU needs it, the upload heap will be 
+		// marshalled over. Please read up on Default Heap usage. An upload heap is 
+		// used here for code simplicity and because there are very few verts to 
+		// actually transfer. 
+		CD3DX12_HEAP_PROPERTIES heapProperty = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC bufferResource = CD3DX12_RESOURCE_DESC::Buffer(mengerIBSize);
+		ThrowIfFailed(m_device->CreateCommittedResource(&heapProperty, D3D12_HEAP_FLAG_NONE, &bufferResource, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&m_mengerIB)));
+
+		// Copy the triangle data to the index buffer. 
+		UINT8* pIndexDataBegin;
+		CD3DX12_RANGE readRange(0, 0);
+		// We do not intend to read from this resource on the CPU. 
+		ThrowIfFailed(m_mengerIB->Map(0, &readRange, reinterpret_cast<void**>(&pIndexDataBegin)));
+		memcpy(pIndexDataBegin, indices.data(), mengerIBSize);
+		m_mengerIB->Unmap(0, nullptr);
+
+		// Initialize the index buffer view. 
+		m_mengerIBView.BufferLocation = m_mengerIB->GetGPUVirtualAddress();
+		m_mengerIBView.Format = DXGI_FORMAT_R32_UINT;
+		m_mengerIBView.SizeInBytes = mengerIBSize;
+		m_mengerIndexCount = static_cast<UINT>(indices.size());
+		m_mengerVertexCount = static_cast<UINT>(vertices.size());
+	}
 }

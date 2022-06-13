@@ -43,6 +43,12 @@ private:
 	{
 		XMFLOAT3 position;
 		XMFLOAT4 color;
+
+		// #DXR Extra: Indexed Geometry
+		Vertex(XMFLOAT4 pos, XMFLOAT4 /*n*/, XMFLOAT4 col)
+			:position(pos.x, pos.y, pos.z), color(col) {}
+		Vertex(XMFLOAT3 pos, XMFLOAT4 col)
+			:position(pos), color(col) {}
 	};
 
 	// Pipeline objects.
@@ -94,7 +100,7 @@ private:
     ///
     /// \param vVertexBuffers : pair of buffer and vertex count
     /// \return AccelerationStructureBuffers for TLAS
-	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers);
+	AccelerationStructureBuffers CreateBottomLevelAS(std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vVertexBuffers, std::vector<std::pair<ComPtr<ID3D12Resource>, uint32_t>> vIndexBuffers = {});
 
 	/// Create the main acceleration structure that holds
 	/// all instances of the scene
@@ -151,4 +157,17 @@ private:
 	void CreateDepthBuffer();
 	ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
 	ComPtr<ID3D12Resource> m_depthStencil;
+
+	// Tetrahedron
+	ComPtr<ID3D12Resource> m_indexBuffer;
+	D3D12_INDEX_BUFFER_VIEW m_indexBufferView;
+
+	// #DXR Extra: Indexed Geometry
+	void CreateMengerSpongeVB();
+	ComPtr< ID3D12Resource > m_mengerVB;
+	ComPtr< ID3D12Resource > m_mengerIB;
+	D3D12_VERTEX_BUFFER_VIEW m_mengerVBView;
+	D3D12_INDEX_BUFFER_VIEW m_mengerIBView;
+	UINT m_mengerIndexCount;
+	UINT m_mengerVertexCount;
 };
