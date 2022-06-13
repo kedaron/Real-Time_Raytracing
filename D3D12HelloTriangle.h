@@ -144,4 +144,6 @@ private:
 	void CreatePlaneVB();
 	void CreateGlobalConstantBuffer();
 	ComPtr<ID3D12Resource> m_globalConstantBuffer;
+	void CreatePerInstanceConstantBuffers();
+	std::vector<ComPtr<ID3D12Resource>> m_perInstanceConstantBuffers;
 };
