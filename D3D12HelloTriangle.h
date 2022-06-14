@@ -170,4 +170,8 @@ private:
 	D3D12_INDEX_BUFFER_VIEW m_mengerIBView;
 	UINT m_mengerIndexCount;
 	UINT m_mengerVertexCount;
+
+	// #DXR Extra - Another ray type (Shadow)
+	ComPtr<IDxcBlob> m_shadowLibrary;
+	ComPtr<ID3D12RootSignature> m_shadowSignature;
 };
