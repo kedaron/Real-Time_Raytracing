@@ -265,24 +265,24 @@ void D3D12HelloTriangle::LoadAssets()
 	// Create the command list.
 	ThrowIfFailed(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), m_pipelineState.Get(), IID_PPV_ARGS(&m_commandList)));
 
-	// Create the vertex buffer.
-	{
+	// Create the vertex buffer. -> triangles
+	/*{
 		// Define the geometry for a triangle.
 		Vertex triangleVertices[] =
 		{
-			/*{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
-			{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-			{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }*/
-			/*{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 1.0f, 0.0f, 1.0f}},
-			{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
-			{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 1.0f, 0.0f, 1.0f, 1.0f } }*/
+			//{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
+			//{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+			//{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
+			//{{0.0f, 0.25f * m_aspectRatio, 0.0f}, {1.0f, 1.0f, 0.0f, 1.0f}},
+			//{ { 0.25f, -0.25f * m_aspectRatio, 0.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
+			//{ { -0.25f, -0.25f * m_aspectRatio, 0.0f }, { 1.0f, 0.0f, 1.0f, 1.0f } }
 			{{std::sqrtf(8.f / 9.f), 0.f, -1.f / 3.f}, {1.f, 0.f, 0.f, 1.f}},
 			{{-std::sqrtf(2.f / 9.f), std::sqrtf(2.f / 3.f), -1.f / 3.f}, {0.f, 1.f, 0.f, 1.f}},
 			{{-std::sqrtf(2.f / 9.f), -std::sqrtf(2.f / 3.f), -1.f / 3.f}, {0.f, 0.f, 1.f, 1.f}},
 			{{0.f, 0.f, 1.f}, {1, 0, 1, 1}}
 		};
 
-		const UINT vertexBufferSize = sizeof(triangleVertices);
+		//const UINT vertexBufferSize = sizeof(triangleVertices);
 
 		// Note: using upload heaps to transfer static data like vert buffers is not 
 		// recommended. Every time the GPU needs it, the upload heap will be marshalled 
@@ -308,8 +308,7 @@ void D3D12HelloTriangle::LoadAssets()
 		m_vertexBufferView.StrideInBytes = sizeof(Vertex);
 		m_vertexBufferView.SizeInBytes = vertexBufferSize;
 
-		// #DXR Extra: Indexed Geometry
-		CreateMengerSpongeVB();
+		
 
 		//----------------------------------------------------------------------------------------------
 		// Indices
@@ -328,10 +327,14 @@ void D3D12HelloTriangle::LoadAssets()
 		m_indexBufferView.Format = DXGI_FORMAT_R32_UINT;
 		m_indexBufferView.SizeInBytes = indexBufferSize;
 
-		// #DXR - Per Instance
-		// Create a vertex buffer for a ground plane, similarly to the triangle definition above
-		CreatePlaneVB();
-	}
+	}*/
+
+	// #DXR Extra: Indexed Geometry
+	CreateMengerSpongeVB();
+
+	// #DXR - Per Instance
+	// Create a vertex buffer for a ground plane, similarly to the triangle definition above
+	CreatePlaneVB();
 
 	// Create synchronization objects and wait until assets have been uploaded to the GPU.
 	{
@@ -425,9 +428,12 @@ void D3D12HelloTriangle::PopulateCommandList()
 		const float clearColor[] = { 0.0f, 0.2f, 0.4f, 1.0f }; 
 		m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST); 
 		m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr); 
-		m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
+		
+
+		// -> triangles
+		/*m_commandList->IASetVertexBuffers(0, 1, &m_vertexBufferView);
 		m_commandList->IASetIndexBuffer(&m_indexBufferView);
-		m_commandList->DrawIndexedInstanced(12, 1, 0, 0, 0);
+		m_commandList->DrawIndexedInstanced(12, 1, 0, 0, 0);*/ 
 
 		// #DXR Extra: Indexed Geometry
 		// In a way similar to triangle rendering, rasterize the Menger Sponge
@@ -625,15 +631,16 @@ void D3D12HelloTriangle::CreateTopLevelAS(const std::vector<std::pair<ComPtr<ID3
 //
 void D3D12HelloTriangle::CreateAccelerationStructures() {
 	// Build the bottom AS from the Triangle vertex buffer 
-	AccelerationStructureBuffers bottomLevelBuffers = CreateBottomLevelAS({ {m_vertexBuffer.Get(), 4} }, { {m_indexBuffer.Get(), 12} });
+	//AccelerationStructureBuffers bottomLevelBuffers = CreateBottomLevelAS({ {m_vertexBuffer.Get(), 4} }, { {m_indexBuffer.Get(), 12} });
 	// Build the bottom AS from the Menger Sponge vertex buffer
 	AccelerationStructureBuffers mengerBottomLevelBuffers = CreateBottomLevelAS({ {m_mengerVB.Get(), m_mengerVertexCount} }, { {m_mengerIB.Get(), m_mengerIndexCount} });
 	// #DXR Extra: Per-Instance Data (Floor)
 	AccelerationStructureBuffers planeBottomLevelBuffers = CreateBottomLevelAS({ {m_planeBuffer.Get(), 6} });
 	// triangle + a plane
 	// Add both the triangle and the indexed geometry
-	m_instances = { {bottomLevelBuffers.pResult, XMMatrixIdentity()}, { mengerBottomLevelBuffers.pResult, XMMatrixIdentity() },
-					{planeBottomLevelBuffers.pResult, XMMatrixTranslation(0, 0, 0)} };
+	m_instances = { //{bottomLevelBuffers.pResult, XMMatrixIdentity()}, 
+				    { mengerBottomLevelBuffers.pResult, XMMatrixIdentity() },
+					{ planeBottomLevelBuffers.pResult, XMMatrixTranslation(0, 0, 0)} };
 
 	CreateTopLevelAS(m_instances);
 
@@ -650,7 +657,7 @@ void D3D12HelloTriangle::CreateAccelerationStructures() {
 	ThrowIfFailed(m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get()));
 	// Store the AS buffers. The rest of the buffers will be released once we exit 
 	// the function 
-	m_bottomLevelAS = bottomLevelBuffers.pResult;
+	m_bottomLevelAS = mengerBottomLevelBuffers.pResult;
 }
 
 //-----------------------------------------------------------------------------
@@ -897,12 +904,13 @@ void D3D12HelloTriangle::CreateShaderBindingTable() {
 	//for (int i = 0; i < 3; ++i) {
 	//	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_perInstanceConstantBuffers[i]->GetGPUVirtualAddress()) });
 	//}
-	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_vertexBuffer->GetGPUVirtualAddress()), (void*)(m_indexBuffer->GetGPUVirtualAddress()) });
+	// -> triangle
+	//m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_vertexBuffer->GetGPUVirtualAddress()), (void*)(m_indexBuffer->GetGPUVirtualAddress()) });
 	m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_mengerVB->GetGPUVirtualAddress()), (void*)(m_mengerIB->GetGPUVirtualAddress()) });
 	// #DXR Extra - Another ray type
-	m_sbtHelper.AddHitGroup(L"PlaneHitGroup", { (void*)(m_perInstanceConstantBuffers[0]->GetGPUVirtualAddress()), heapPointer });
-	// #DXR Extra - Another ray type
 	m_sbtHelper.AddHitGroup(L"ShadowHitGroup", {});
+	// #DXR Extra - Another ray type
+	m_sbtHelper.AddHitGroup(L"PlaneHitGroup", { (void*)(m_perInstanceConstantBuffers[0]->GetGPUVirtualAddress()), heapPointer });
 
 	// The plane also uses a constant buffer for its vertex colors
 	//m_sbtHelper.AddHitGroup(L"HitGroup", { (void*)(m_perInstanceConstantBuffers[0]->GetGPUVirtualAddress()) });
